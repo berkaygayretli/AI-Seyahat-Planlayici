@@ -1,36 +1,28 @@
 ﻿# -*- coding: utf-8 -*-
-import os
-from dotenv import load_dotenv
-from google import genai
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+import seyahat # seyahat.py dosyasını buraya bağladık
 import json
 
-# .env dosyasındaki GEMINI_API_KEY'i yükle
-load_dotenv()
+app = FastAPI()
 
-# Anahtarı gizli kasadan al
-API_KEY = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=API_KEY)
+# Frontend erişim izinleri (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Gemini 3 için talimatlar
-SYSTEM_INSTRUCTION = """
-Sen profesyonel bir seyahat planlayıcısısın. 
-SADECE aşağıdaki JSON formatında cevap ver. Türkçe karakterleri düzgün kullan.
-Her aktivite için 'transport_info' alanına bir önceki yerden buraya ulaşım bilgisini yaz.
-"""
+@app.get("/", response_class=HTMLResponse)
+def home():
+    # Arayüz dosyasını açar
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
-def generate_travel_plan(city, days, budget):
-    query = f"Şehir: {city}, Süre: {days} gün, Bütçe: {budget} TL. Ulaşım bilgileri dahil bir seyahat rotası oluştur."
-    
-    try:
-        # BURASI SENİN DOKUNMAMIZI İSTEMEDİĞİN KRİTİK MODEL
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=query,
-            config={
-                'system_instruction': SYSTEM_INSTRUCTION,
-                'response_mime_type': 'application/json',
-            }
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        return {"error": f"AI Hatası: {str(e)}"}
+@app.get("/planla")
+def get_plan(sehir: str, gun: int, butce: int):
+    # seyahat.py içindeki fonksiyonu çalıştırır
+    plan = seyahat.generate_travel_plan(sehir, gun, butce)
+    return plan
