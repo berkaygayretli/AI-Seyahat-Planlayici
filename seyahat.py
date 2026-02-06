@@ -1,62 +1,36 @@
 ﻿# -*- coding: utf-8 -*-
-import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+from google import genai
 import json
 
-# 1. API Ayarları
-# NOT: API anahtarını güvenliğin için bir .env dosyasında tutmanı öneririm
-API_KEY = "AIzaSyDddMI7EH5Tx_w6koClmeYBTphM2B5cVuo" 
-genai.configure(api_key=API_KEY)
+# .env dosyasındaki GEMINI_API_KEY'i yükle
+load_dotenv()
 
-# 2. Sistem Talimatı (AI'nın kişiliğini ve kurallarını burada belirliyoruz)
+# Anahtarı gizli kasadan al
+API_KEY = os.getenv("GEMINI_API_KEY")
+client = genai.Client(api_key=API_KEY)
+
+# Gemini 3 için talimatlar
 SYSTEM_INSTRUCTION = """
-Sen uzman bir seyahat planlayıcısısın. Kullanıcının bütçesine, süresine ve ilgi alanlarına göre 
-en mantıklı, coğrafi olarak birbirine yakın mekanlardan oluşan bir rota oluşturursun.
-Cevaplarını sadece JSON formatında verirsin. Asla JSON dışında bir metin yazmazsın.Türkçe cevap ver.
+Sen profesyonel bir seyahat planlayıcısısın. 
+SADECE aşağıdaki JSON formatında cevap ver. Türkçe karakterleri düzgün kullan.
+Her aktivite için 'transport_info' alanına bir önceki yerden buraya ulaşım bilgisini yaz.
 """
 
-def generate_travel_plan(city, days, budget, interests):
-    # Modeli yapılandır (1.5 Flash hem hızlı hem de işimizi fazlasıyla görür)
-    model = genai.GenerativeModel(
-        model_name="gemini-3-flash-preview",
-        system_instruction=SYSTEM_INSTRUCTION
-    )
-
-    # Kullanıcıdan gelen ham veriyi prompt haline getiriyoruz
-    user_prompt = f"""
-    Şehir: {city}
-    Süre: {days} Gün
-    Bütçe Seviyesi: {budget}
-    İlgi Alanları: {interests}
-
-    Lütfen bu geziyi JSON formatında planla. Yapı şu şekilde olsun:
-    {{
-      "trip_name": "Şehir Gezisi",
-      "total_days": {days},
-      "itinerary": [
-        {{
-          "day": 1,
-          "activities": [
-            {{"time": "09:00", "title": "...", "location": "...", "description": "...", "estimated_cost": "..."}}
-          ]
-        }}
-      ]
-    }}
-    """
-
-    # Gemini'den yanıtı alırken JSON modunu aktif ediyoruz
-    response = model.generate_content(
-        user_prompt,
-        generation_config={"response_mime_type": "application/json"}
-    )
-
-    # Gelen string'i Python sözlüğüne (dict) çeviriyoruz
+def generate_travel_plan(city, days, budget):
+    query = f"Şehir: {city}, Süre: {days} gün, Bütçe: {budget} TL. Ulaşım bilgileri dahil bir seyahat rotası oluştur."
+    
     try:
-        plan_data = json.loads(response.text)
-        return plan_data
+        # BURASI SENİN DOKUNMAMIZI İSTEMEDİĞİN KRİTİK MODEL
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=query,
+            config={
+                'system_instruction': SYSTEM_INSTRUCTION,
+                'response_mime_type': 'application/json',
+            }
+        )
+        return json.loads(response.text)
     except Exception as e:
-        return {"error": f"JSON parse hatası: {str(e)}", "raw_response": response.text}
-
-# --- TEST ETME ---
-if __name__ == "__main__":
-    test_plan = generate_travel_plan("İstanbul", 2, "Orta", "Tarihi yerler ve kahve dükkanları")
-    print(json.dumps(test_plan, indent=2, ensure_ascii=False))
+        return {"error": f"AI Hatası: {str(e)}"}
